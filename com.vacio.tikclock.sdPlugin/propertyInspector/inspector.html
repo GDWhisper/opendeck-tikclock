@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>TikClock</title>
+<style>
+	:root { color-scheme: dark; }
+	body {
+		margin: 0;
+		padding: 10px 12px;
+		background: transparent;
+		color: #d8d8d8;
+		font-family: "Segoe UI", sans-serif;
+		font-size: 13px;
+	}
+	.row {
+		display: flex;
+		align-items: center;
+		margin-bottom: 10px;
+		gap: 8px;
+	}
+	.row > label:first-child {
+		flex: 0 0 90px;
+		text-align: right;
+		color: #9a9a9a;
+	}
+	select {
+		flex: 1;
+		background: #2d2d2d;
+		color: #d8d8d8;
+		border: 1px solid #3d3d3d;
+		border-radius: 4px;
+		padding: 4px 6px;
+		font-size: 13px;
+	}
+	input[type="color"] {
+		width: 44px;
+		height: 26px;
+		padding: 0;
+		border: 1px solid #3d3d3d;
+		border-radius: 4px;
+		background: #2d2d2d;
+	}
+	input[type="checkbox"] { accent-color: #4fc3f7; }
+	.check-label { user-select: none; }
+</style>
+</head>
+<body>
+	<div class="row">
+		<label for="position">显示位置</label>
+		<select id="position">
+			<option value="hour_pair">时 — 两位同格</option>
+			<option value="hour_tens">时 — 十位</option>
+			<option value="hour_ones">时 — 个位</option>
+			<option value="colon">冒号 :</option>
+			<option value="minute_pair">分 — 两位同格</option>
+			<option value="minute_tens">分 — 十位</option>
+			<option value="minute_ones">分 — 个位</option>
+			<option value="second_pair">秒 — 两位同格</option>
+			<option value="second_tens">秒 — 十位</option>
+			<option value="second_ones">秒 — 个位</option>
+		</select>
+	</div>
+	<div class="row">
+		<label></label>
+		<input type="checkbox" id="twenty_four_hour">
+		<label class="check-label" for="twenty_four_hour">24 小时制</label>
+	</div>
+	<div class="row">
+		<label></label>
+		<input type="checkbox" id="blink_colon">
+		<label class="check-label" for="blink_colon">冒号闪烁</label>
+	</div>
+	<div class="row">
+		<label for="color">文字颜色</label>
+		<input type="color" id="color">
+	</div>
+	<div class="row">
+		<label for="background">背景颜色</label>
+		<input type="color" id="background">
+	</div>
+
+<script>
+	let websocket = null;
+	let context = null;
+	let settings = {
+		position: "hour_tens",
+		twenty_four_hour: true,
+		blink_colon: true,
+		color: "#ffffff",
+		background: "#000000"
+	};
+
+	const fields = ["position", "twenty_four_hour", "blink_colon", "color", "background"];
+
+	function applyToForm() {
+		document.getElementById("position").value = settings.position;
+		document.getElementById("twenty_four_hour").checked = settings.twenty_four_hour;
+		document.getElementById("blink_colon").checked = settings.blink_colon;
+		document.getElementById("color").value = settings.color;
+		document.getElementById("background").value = settings.background;
+	}
+
+	function readFromForm() {
+		settings.position = document.getElementById("position").value;
+		settings.twenty_four_hour = document.getElementById("twenty_four_hour").checked;
+		settings.blink_colon = document.getElementById("blink_colon").checked;
+		settings.color = document.getElementById("color").value;
+		settings.background = document.getElementById("background").value;
+	}
+
+	function saveSettings() {
+		readFromForm();
+		if (websocket && websocket.readyState === WebSocket.OPEN) {
+			websocket.send(JSON.stringify({
+				event: "setSettings",
+				context: context,
+				payload: settings
+			}));
+		}
+	}
+
+	fields.forEach(id => {
+		document.getElementById(id).addEventListener("change", saveSettings);
+	});
+
+	// 宿主注入调用的入口
+	function connectElgatoStreamDeckSocket(port, uuid, registerEvent, info, actionInfo) {
+		context = uuid;
+		const action = JSON.parse(actionInfo);
+		settings = Object.assign(settings, action?.payload?.settings ?? {});
+		applyToForm();
+
+		websocket = new WebSocket("ws://localhost:" + port);
+		websocket.onopen = () => {
+			websocket.send(JSON.stringify({ event: registerEvent, uuid: uuid }));
+		};
+		websocket.onmessage = (message) => {
+			const data = JSON.parse(message.data);
+			if (data.event === "didReceiveSettings") {
+				settings = Object.assign(settings, data.payload?.settings ?? {});
+				applyToForm();
+			}
+		};
+	}
+	window.connectElgatoStreamDeckSocket = connectElgatoStreamDeckSocket;
+
+	applyToForm();
+</script>
+</body>
+</html>

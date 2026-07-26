@@ -1,0 +1,18 @@
+[package]
+name = "tikclock"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+openaction = "2.7"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+serde = { version = "1", features = ["derive"] }
+chrono = "0.4"
+base64 = "0.22"
+log = "0.4"
+simplelog = "0.12"
+
+[profile.release]
+strip = true
+lto = true
+opt-level = "s"

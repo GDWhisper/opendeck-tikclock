@@ -1,0 +1,25 @@
+{
+	"Name": "TikClock",
+	"Author": "vacio",
+	"Version": "1.0.0",
+	"Icon": "icons/icon",
+	"Category": "TikClock",
+	"CategoryIcon": "icons/icon",
+	"OS": [{ "Platform": "windows" }],
+	"CodePaths": {
+		"x86_64-pc-windows-msvc": "bin/tikclock.exe"
+	},
+	"Actions": [
+		{
+			"Name": "Clock Digit",
+			"UUID": "com.vacio.tikclock.digit",
+			"Icon": "icons/icon",
+			"Tooltip": "Displays one digit of the current time (HH:MM:SS)",
+			"Controllers": ["Keypad"],
+			"SupportedInMultiActions": false,
+			"DisableAutomaticStates": true,
+			"PropertyInspectorPath": "propertyInspector/inspector.html",
+			"States": [{ "Image": "actionDefaultImage" }]
+		}
+	]
+}

@@ -1,0 +1,5 @@
+# Rust 构建产物
+/target/
+
+# 插件目录内的构建产物（由 build.ps1 拷入）
+/com.vacio.tikclock.sdPlugin/bin/
