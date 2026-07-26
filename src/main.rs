@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use chrono::{Local, Timelike};
@@ -52,12 +52,21 @@ impl Default for DigitSettings {
 	}
 }
 
+/// 单个实例的强制刷新周期（秒），对抗设备重置等未发事件的画面丢失
+const FORCE_REFRESH_PERIOD: u32 = 15;
+/// 单次 tick 允许发送的 setImage 上限（熔断，防止对宿主/设备的突发洪峰）
+const MAX_IMAGES_PER_TICK: u32 = 20;
+/// 全量失效的最小间隔，防止设备重连抖动引发重绘风暴
+const MIN_INVALIDATE_INTERVAL: Duration = Duration::from_secs(5);
+
 /// 每个实例的当前设置（tick 任务据此渲染）
 static SETTINGS: LazyLock<Mutex<HashMap<InstanceId, DigitSettings>>> =
 	LazyLock::new(|| Mutex::new(HashMap::new()));
 /// 每个实例上一次渲染的文本，用于跳过无变化的帧
 static LAST_TEXT: LazyLock<Mutex<HashMap<InstanceId, String>>> =
 	LazyLock::new(|| Mutex::new(HashMap::new()));
+/// 上一次全量失效的时刻，用于防抖
+static LAST_INVALIDATE: LazyLock<Mutex<Option<Instant>>> = LazyLock::new(|| Mutex::new(None));
 
 /// 计算某实例当前应显示的文本（单位或两位）
 fn text_for(settings: &DigitSettings, hour: u32, minute: u32, second: u32) -> String {
@@ -222,9 +231,24 @@ fn spawn_command(command: &str) -> std::io::Result<std::process::Child> {
 	}
 }
 
-/// 强制下一次 tick 全量重绘（清空差分缓存）
+/// 强制下一次 tick 全量重绘（清空差分缓存）；带防抖，设备重连抖动时不会反复触发
 fn invalidate_all() {
+	let mut last = LAST_INVALIDATE.lock().unwrap();
+	if let Some(at) = *last {
+		if at.elapsed() < MIN_INVALIDATE_INTERVAL {
+			return;
+		}
+	}
+	*last = Some(Instant::now());
 	LAST_TEXT.lock().unwrap().clear();
+}
+
+/// 实例在强制刷新周期内的相位：按 ID 哈希错峰，避免所有实例在同一 tick 集中重发
+fn instance_phase(instance_id: &str) -> u32 {
+	instance_id
+		.bytes()
+		.fold(0u32, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u32))
+		% FORCE_REFRESH_PERIOD
 }
 
 struct GlobalHandler;
@@ -243,40 +267,49 @@ impl GlobalEventHandler for GlobalHandler {
 	}
 }
 
-/// 每秒对齐整秒 tick，只重绘字符发生变化的实例
+/// 每秒对齐整秒 tick，只重绘字符发生变化的实例；强制刷新按实例错峰，单 tick 发送有熔断
 async fn tick_loop() {
 	let mut ticks: u32 = 0;
 	loop {
 		let ms = Local::now().timestamp_subsec_millis() as u64;
 		tokio::time::sleep(Duration::from_millis(1000u64.saturating_sub(ms).max(1) + 5)).await;
 
-		// 周期性强制全量重绘，对抗设备重连等未发事件的画面重置
 		ticks = ticks.wrapping_add(1);
-		if ticks % 15 == 0 {
-			invalidate_all();
-		}
-
 		let now = Local::now();
 		let (hour, minute, second) = (now.hour(), now.minute(), now.second());
+		let mut sent: u32 = 0;
 
 		for instance in visible_instances(DigitAction::UUID).await {
-			// 计算并比对缓存；不持锁跨 await
+			// 计算并比对缓存；不持锁跨 await，发送成功前不更新缓存
 			let pending = {
 				let settings_map = SETTINGS.lock().unwrap();
 				let Some(settings) = settings_map.get(&instance.instance_id) else {
 					continue;
 				};
 				let text = text_for(settings, hour, minute, second);
-				let mut last = LAST_TEXT.lock().unwrap();
-				if last.get(&instance.instance_id) == Some(&text) {
+				// 周期性强制重绘对抗画面丢失，相位错峰后每 tick 最多多发少量几帧
+				let force = instance_phase(&instance.instance_id) == ticks % FORCE_REFRESH_PERIOD;
+				let unchanged =
+					LAST_TEXT.lock().unwrap().get(&instance.instance_id) == Some(&text);
+				if unchanged && !force {
 					None
 				} else {
 					let image = render_svg(&text, settings);
-					last.insert(instance.instance_id.clone(), text);
-					Some(image)
+					Some((text, image))
 				}
 			};
-			if let Some(image) = pending {
+			if let Some((text, image)) = pending {
+				// 熔断：超出预算的实例不更新缓存，下个 tick 自动补发
+				if sent >= MAX_IMAGES_PER_TICK {
+					log::warn!("per-tick image budget exhausted, deferring {}", instance.instance_id);
+					LAST_TEXT.lock().unwrap().remove(&instance.instance_id);
+					continue;
+				}
+				sent += 1;
+				LAST_TEXT
+					.lock()
+					.unwrap()
+					.insert(instance.instance_id.clone(), text);
 				if let Err(error) = instance.set_image(Some(image), None).await {
 					log::warn!("setImage failed for {}: {error:?}", instance.instance_id);
 				}
@@ -377,5 +410,23 @@ mod tests {
 		assert_eq!(safe_color("#12abEF", "#000000"), "#12abEF");
 		assert_eq!(safe_color("red\"/><script>", "#000000"), "#000000");
 		assert_eq!(safe_color("", "#ffffff"), "#ffffff");
+	}
+
+	#[test]
+	fn phase_is_deterministic_and_in_period() {
+		for id in ["a", "instance-123", "com.gdwhisper.tikclock.digit.0", ""] {
+			let phase = instance_phase(id);
+			assert!(phase < FORCE_REFRESH_PERIOD);
+			assert_eq!(phase, instance_phase(id));
+		}
+	}
+
+	#[test]
+	fn phases_spread_instances_across_ticks() {
+		// 相邻 ID（实际实例 ID 常为递增序号）应落在不同相位，而非同一 tick 集中重发
+		let phases: std::collections::HashSet<u32> = (0..15)
+			.map(|i| instance_phase(&format!("instance-{i}")))
+			.collect();
+		assert!(phases.len() > 5, "phases too clustered: {phases:?}");
 	}
 }
