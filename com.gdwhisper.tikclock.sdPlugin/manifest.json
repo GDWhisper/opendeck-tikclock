@@ -1,18 +1,19 @@
 {
 	"Name": "TikClock",
-	"Author": "vacio",
+	"Author": "GDWhisper",
 	"Version": "1.0.0",
 	"Icon": "icons/icon",
 	"Category": "TikClock",
 	"CategoryIcon": "icons/icon",
-	"OS": [{ "Platform": "windows" }],
+	"OS": [{ "Platform": "windows" }, { "Platform": "linux" }],
 	"CodePaths": {
-		"x86_64-pc-windows-msvc": "bin/tikclock.exe"
+		"x86_64-pc-windows-msvc": "bin/tikclock.exe",
+		"x86_64-unknown-linux-gnu": "bin/tikclock"
 	},
 	"Actions": [
 		{
 			"Name": "Clock Digit",
-			"UUID": "com.vacio.tikclock.digit",
+			"UUID": "com.gdwhisper.tikclock.digit",
 			"Icon": "icons/icon",
 			"Tooltip": "Displays one digit of the current time (HH:MM:SS)",
 			"Controllers": ["Keypad"],

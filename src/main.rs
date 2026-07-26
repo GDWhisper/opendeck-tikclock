@@ -35,6 +35,8 @@ struct DigitSettings {
 	blink_colon: bool,
 	color: String,
 	background: String,
+	/// 按键时执行的命令，空则无动作
+	command: String,
 }
 
 impl Default for DigitSettings {
@@ -45,6 +47,7 @@ impl Default for DigitSettings {
 			blink_colon: true,
 			color: "#ffffff".to_owned(),
 			background: "#000000".to_owned(),
+			command: String::new(),
 		}
 	}
 }
@@ -144,7 +147,7 @@ struct DigitAction;
 #[async_trait]
 impl Action for DigitAction {
 	type Settings = DigitSettings;
-	const UUID: &'static str = "com.vacio.tikclock.digit";
+	const UUID: &'static str = "com.gdwhisper.tikclock.digit";
 
 	async fn will_appear(
 		&self,
@@ -178,6 +181,44 @@ impl Action for DigitAction {
 			.unwrap()
 			.insert(instance.instance_id.clone(), settings.clone());
 		redraw_instance(instance, settings).await
+	}
+
+	async fn key_down(
+		&self,
+		instance: &Instance,
+		settings: &Self::Settings,
+	) -> OpenActionResult<()> {
+		let command = settings.command.trim();
+		if command.is_empty() {
+			return Ok(());
+		}
+		// 静默拉起子进程，不等待、不闪控制台窗口
+		match spawn_command(command) {
+			Ok(_) => Ok(()),
+			Err(error) => {
+				log::warn!("failed to run command {command:?}: {error}");
+				instance.show_alert().await
+			}
+		}
+	}
+}
+
+/// 用平台默认 shell 静默执行命令（Windows: cmd /C；其他: sh -c）
+fn spawn_command(command: &str) -> std::io::Result<std::process::Child> {
+	#[cfg(windows)]
+	{
+		use std::os::windows::process::CommandExt;
+		const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+		std::process::Command::new("cmd")
+			.args(["/C", command])
+			.creation_flags(CREATE_NO_WINDOW)
+			.spawn()
+	}
+	#[cfg(not(windows))]
+	{
+		std::process::Command::new("sh")
+			.args(["-c", command])
+			.spawn()
 	}
 }
 

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <title>TikClock</title>
@@ -33,6 +33,15 @@
 		padding: 4px 6px;
 		font-size: 13px;
 	}
+	input[type="text"] {
+		flex: 1;
+		background: #2d2d2d;
+		color: #d8d8d8;
+		border: 1px solid #3d3d3d;
+		border-radius: 4px;
+		padding: 4px 6px;
+		font-size: 13px;
+	}
 	input[type="color"] {
 		width: 44px;
 		height: 26px;
@@ -47,37 +56,41 @@
 </head>
 <body>
 	<div class="row">
-		<label for="position">显示位置</label>
+		<label for="position" data-i18n="position">Position</label>
 		<select id="position">
-			<option value="hour_pair">时 — 两位同格</option>
-			<option value="hour_tens">时 — 十位</option>
-			<option value="hour_ones">时 — 个位</option>
-			<option value="colon">冒号 :</option>
-			<option value="minute_pair">分 — 两位同格</option>
-			<option value="minute_tens">分 — 十位</option>
-			<option value="minute_ones">分 — 个位</option>
-			<option value="second_pair">秒 — 两位同格</option>
-			<option value="second_tens">秒 — 十位</option>
-			<option value="second_ones">秒 — 个位</option>
+			<option value="hour_pair" data-i18n="hour_pair">Hour — both digits</option>
+			<option value="hour_tens" data-i18n="hour_tens">Hour — tens</option>
+			<option value="hour_ones" data-i18n="hour_ones">Hour — ones</option>
+			<option value="colon" data-i18n="colon">Colon :</option>
+			<option value="minute_pair" data-i18n="minute_pair">Minute — both digits</option>
+			<option value="minute_tens" data-i18n="minute_tens">Minute — tens</option>
+			<option value="minute_ones" data-i18n="minute_ones">Minute — ones</option>
+			<option value="second_pair" data-i18n="second_pair">Second — both digits</option>
+			<option value="second_tens" data-i18n="second_tens">Second — tens</option>
+			<option value="second_ones" data-i18n="second_ones">Second — ones</option>
 		</select>
 	</div>
 	<div class="row">
 		<label></label>
 		<input type="checkbox" id="twenty_four_hour">
-		<label class="check-label" for="twenty_four_hour">24 小时制</label>
+		<label class="check-label" for="twenty_four_hour" data-i18n="twenty_four_hour">24-hour clock</label>
 	</div>
 	<div class="row">
 		<label></label>
 		<input type="checkbox" id="blink_colon">
-		<label class="check-label" for="blink_colon">冒号闪烁</label>
+		<label class="check-label" for="blink_colon" data-i18n="blink_colon">Blinking colon</label>
 	</div>
 	<div class="row">
-		<label for="color">文字颜色</label>
+		<label for="color" data-i18n="color">Text color</label>
 		<input type="color" id="color">
 	</div>
 	<div class="row">
-		<label for="background">背景颜色</label>
+		<label for="background" data-i18n="background">Background</label>
 		<input type="color" id="background">
+	</div>
+	<div class="row">
+		<label for="command" data-i18n="command">On-press command</label>
+		<input type="text" id="command" data-i18n-placeholder="command_placeholder" placeholder="Empty = no action, e.g. notepad">
 	</div>
 
 <script>
@@ -88,10 +101,47 @@
 		twenty_four_hour: true,
 		blink_colon: true,
 		color: "#ffffff",
-		background: "#000000"
+		background: "#000000",
+		command: ""
 	};
 
-	const fields = ["position", "twenty_four_hour", "blink_colon", "color", "background"];
+	const fields = ["position", "twenty_four_hour", "blink_colon", "color", "background", "command"];
+
+	// i18n：默认英文，宿主语言为 zh* 时切中文
+	const I18N = {
+		zh: {
+			position: "显示位置",
+			hour_pair: "时 — 两位同格",
+			hour_tens: "时 — 十位",
+			hour_ones: "时 — 个位",
+			colon: "冒号 :",
+			minute_pair: "分 — 两位同格",
+			minute_tens: "分 — 十位",
+			minute_ones: "分 — 个位",
+			second_pair: "秒 — 两位同格",
+			second_tens: "秒 — 十位",
+			second_ones: "秒 — 个位",
+			twenty_four_hour: "24 小时制",
+			blink_colon: "冒号闪烁",
+			color: "文字颜色",
+			background: "背景颜色",
+			command: "按键命令",
+			command_placeholder: "留空则无动作，如 notepad"
+		}
+	};
+
+	function applyI18n(language) {
+		const dict = I18N[String(language || "").split(/[-_]/)[0]];
+		if (!dict) return; // 英文为 HTML 默认文案
+		document.querySelectorAll("[data-i18n]").forEach(el => {
+			const text = dict[el.dataset.i18n];
+			if (text) el.textContent = text;
+		});
+		document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
+			const text = dict[el.dataset.i18nPlaceholder];
+			if (text) el.placeholder = text;
+		});
+	}
 
 	function applyToForm() {
 		document.getElementById("position").value = settings.position;
@@ -99,6 +149,7 @@
 		document.getElementById("blink_colon").checked = settings.blink_colon;
 		document.getElementById("color").value = settings.color;
 		document.getElementById("background").value = settings.background;
+		document.getElementById("command").value = settings.command;
 	}
 
 	function readFromForm() {
@@ -107,6 +158,7 @@
 		settings.blink_colon = document.getElementById("blink_colon").checked;
 		settings.color = document.getElementById("color").value;
 		settings.background = document.getElementById("background").value;
+		settings.command = document.getElementById("command").value;
 	}
 
 	function saveSettings() {
@@ -127,6 +179,7 @@
 	// 宿主注入调用的入口
 	function connectElgatoStreamDeckSocket(port, uuid, registerEvent, info, actionInfo) {
 		context = uuid;
+		applyI18n(JSON.parse(info)?.application?.language);
 		const action = JSON.parse(actionInfo);
 		settings = Object.assign(settings, action?.payload?.settings ?? {});
 		applyToForm();

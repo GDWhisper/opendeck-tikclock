@@ -2,6 +2,8 @@
 name = "tikclock"
 version = "1.0.0"
 edition = "2021"
+authors = ["GDWhisper"]
+repository = "https://github.com/GDWhisper/opendeck-tikclock"
 
 [dependencies]
 openaction = "2.7"
