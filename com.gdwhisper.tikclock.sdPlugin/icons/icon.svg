@@ -1,7 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
 	<rect width="144" height="144" rx="24" fill="#101418"/>
-	<circle cx="72" cy="72" r="52" fill="none" stroke="#e8e8e8" stroke-width="8"/>
-	<line x1="72" y1="72" x2="72" y2="40" stroke="#e8e8e8" stroke-width="8" stroke-linecap="round"/>
-	<line x1="72" y1="72" x2="94" y2="84" stroke="#4fc3f7" stroke-width="8" stroke-linecap="round"/>
-	<circle cx="72" cy="72" r="6" fill="#4fc3f7"/>
+	<!-- 2x2 按键格：每格一位数字，呈现"时间拆格显示"的产品特性 -->
+	<rect x="12" y="12" width="56" height="56" rx="12" fill="#232b33"/>
+	<rect x="76" y="12" width="56" height="56" rx="12" fill="#232b33"/>
+	<rect x="12" y="76" width="56" height="56" rx="12" fill="#232b33"/>
+	<rect x="76" y="76" width="56" height="56" rx="12" fill="#232b33"/>
+	<text x="40" y="56" font-family="sans-serif" font-size="44" font-weight="bold" fill="#e8e8e8" text-anchor="middle">1</text>
+	<text x="104" y="56" font-family="sans-serif" font-size="44" font-weight="bold" fill="#e8e8e8" text-anchor="middle">2</text>
+	<text x="40" y="120" font-family="sans-serif" font-size="44" font-weight="bold" fill="#e8e8e8" text-anchor="middle">0</text>
+	<text x="104" y="120" font-family="sans-serif" font-size="44" font-weight="bold" fill="#e8e8e8" text-anchor="middle">5</text>
+	<!-- 中心冒号：数码钟符号，用品牌强调色 -->
+	<circle cx="72" cy="61" r="6" fill="#4fc3f7"/>
+	<circle cx="72" cy="83" r="6" fill="#4fc3f7"/>
 </svg>
