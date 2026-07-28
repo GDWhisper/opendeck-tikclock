@@ -1,15 +1,21 @@
 {
 	"Name": "TikClock",
 	"Author": "GDWhisper",
-	"Version": "1.0.0",
+	"Version": "1.0.1",
 	"Icon": "icons/icon",
 	"Category": "TikClock",
 	"CategoryIcon": "icons/icon",
-	"OS": [{ "Platform": "windows" }, { "Platform": "linux" }],
+	"OS": [{ "Platform": "windows" }, { "Platform": "mac" }, { "Platform": "linux" }],
 	"CodePaths": {
-		"x86_64-pc-windows-msvc": "bin/tikclock.exe",
-		"x86_64-unknown-linux-gnu": "bin/tikclock"
+		"x86_64-pc-windows-msvc": "bin/tikclock-x86_64-pc-windows-msvc.exe",
+		"x86_64-apple-darwin": "bin/tikclock-x86_64-apple-darwin",
+		"aarch64-apple-darwin": "bin/tikclock-aarch64-apple-darwin",
+		"x86_64-unknown-linux-gnu": "bin/tikclock-x86_64-unknown-linux-gnu",
+		"aarch64-unknown-linux-gnu": "bin/tikclock-aarch64-unknown-linux-gnu"
 	},
+	"CodePathWin": "bin/tikclock-x86_64-pc-windows-msvc.exe",
+	"CodePathMac": "bin/tikclock-x86_64-apple-darwin",
+	"CodePathLin": "bin/tikclock-x86_64-unknown-linux-gnu",
 	"Actions": [
 		{
 			"Name": "Clock Digit",

@@ -8,7 +8,7 @@ Orientation for any LLM/agent taking over this repository.
 
 - Bundle ID: `com.gdwhisper.tikclock` · Action UUID: `com.gdwhisper.tikclock.digit`
 - Author identity everywhere: `GDWhisper` · Repo: `https://github.com/GDWhisper/opendeck-tikclock`
-- Platforms: Windows + Linux (see `OS`/`CodePaths` in the manifest)
+- Platforms: Windows (x64) + macOS (x64/arm64) + Linux (x64/arm64) — see `OS`/`CodePaths` in the manifest; binaries are named `tikclock-<target-triple>[.exe]`
 - License: MIT
 
 ## Repository layout
@@ -19,8 +19,8 @@ com.gdwhisper.tikclock.sdPlugin/     # The distributable plugin bundle
   manifest.json                      # OpenAction manifest (Name/Author/Version/Actions)
   icons/icon.svg                     # Plugin icon: 2×2 key grid digital clock (NOT an analog clock — see conventions)
   propertyInspector/inspector.html   # Settings UI, self-contained HTML with built-in zh/en i18n
-  bin/                               # Compiled binaries land here (tikclock.exe / tikclock)
-.github/workflows/build.yml          # CI: test + build both platforms, package zip, release on tags
+  bin/                               # Compiled binaries land here (tikclock-<target-triple>[.exe])
+.github/workflows/build.yml          # CI: test + build 5 targets (win x64, mac x64/arm64, linux x64/arm64), package zip, release on tags
 build.ps1                            # Local dev build: cargo build --release + copy exe into bundle
 assets/preview.png                   # Real-device photo used by both READMEs
 README.md / README.zh-CN.md          # Bilingual docs (see conventions)
@@ -44,7 +44,7 @@ Key mechanisms — **do not remove these when refactoring**, each guards against
 | Color whitelist | `safe_color()` | Settings values are interpolated into SVG; only `#hex` passes, preventing SVG injection |
 | No lock across await | `tick_loop` inner block | Mutex guards are dropped before `set_image().await`; keep it that way |
 
-Other behaviors: `key_down` optionally runs a user-configured shell command silently (`cmd /C` on Windows with `CREATE_NO_WINDOW`, `sh -c` elsewhere); 12-hour mode blanks the hour-tens key and drops leading zero for the hour pair.
+Other behaviors: `key_down` optionally runs a user-configured shell command silently (`cmd /C` on Windows with `CREATE_NO_WINDOW`, `sh -c` on macOS/Linux); 12-hour mode blanks the hour-tens key and drops leading zero for the hour pair.
 
 ## Conventions
 
@@ -65,7 +65,7 @@ cargo test          # unit tests (pure functions: text_for, safe_color, instance
 Release flow (fully automated after tagging):
 1. Bump `Version` in `manifest.json` **and** `version` in `Cargo.toml`.
 2. Commit, push `main`, then `git tag vX.Y.Z && git push origin vX.Y.Z`.
-3. CI builds Windows + Linux, assembles `com.gdwhisper.tikclock.zip` (binaries for both platforms inside one bundle, `chmod +x` on the Linux one), and publishes a GitHub Release.
+3. CI builds all 5 targets (Windows x64 on `windows-latest`, macOS x64/arm64 on `macos-latest`, Linux x64 on `ubuntu-22.04`, Linux arm64 natively on `ubuntu-22.04-arm`), assembles `com.gdwhisper.tikclock.zip` (all binaries in one bundle as `bin/tikclock-<triple>[.exe]`, `chmod +x` on the Unix ones), and publishes a GitHub Release.
 
 CI pitfalls already learned (do not regress):
 - The `package` job needs `permissions: contents: write` or release creation fails with 403.
@@ -82,6 +82,6 @@ Listed in the OpenDeck plugin store via [`OpenActionAPI/plugins`](https://github
 ## Known landmines
 
 - `openaction` crate: `visible_instances()` takes `&str` (use `DigitAction::UUID`), not a typed ActionUuid.
-- Linux binary in the bundle must be executable (`chmod +x` happens in CI packaging; remember it if packaging manually).
-- OpenDeck plugin install paths differ per platform (Windows `%APPDATA%`, Linux `~/.local/share`, Flatpak variant) — documented in the READMEs; keep those paths accurate.
+- Linux/macOS binaries in the bundle must be executable (`chmod +x` happens in CI packaging; remember it if packaging manually).
+- OpenDeck plugin install paths differ per platform (Windows `%APPDATA%`, macOS `~/Library/Application Support`, Linux `~/.local/share`, Flatpak variant) — documented in the READMEs; keep those paths accurate.
 - `target/` is gitignored and doubles as scratch space for tooling (e.g., a clone of the catalogue fork lives at `target/plugins-fork` during submission work); never commit anything under it.

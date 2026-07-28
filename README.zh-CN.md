@@ -18,7 +18,7 @@
 - **冒号闪烁** —— 可选，随秒同步闪烁
 - **12 / 24 小时制** —— 12 小时制自动去掉前导零，更自然
 - **自定义颜色** —— 每个按键可单独设置文字色和背景色
-- **按键执行命令** —— 每个数字格都能兼职启动器（Windows 走 `cmd /C`，Linux 走 `sh -c`）；留空则无动作
+- **按键执行命令** —— 每个数字格都能兼职启动器（Windows 走 `cmd /C`，macOS/Linux 走 `sh -c`）；留空则无动作
 - **设置界面双语** —— 英文 / 简体中文，跟随宿主语言自动切换
 - **轻量且防御性设计** —— 单个约 1.4 MB 的原生二进制；差分渲染只发送变化的帧（8 键完整时钟约 3 条消息/秒），并内置错峰强制刷新、失效防抖和单周期发送熔断，绝不会冲垮宿主或设备
 
@@ -44,6 +44,7 @@
 | 平台 | 路径 |
 |---|---|
 | Windows | `%appdata%\opendeck\plugins\` |
+| macOS | `~/Library/Application Support/opendeck/plugins/` |
 | Linux | `~/.config/opendeck/plugins/` |
 | Flatpak | `~/.var/app/me.amankhanna.opendeck/config/opendeck/plugins/` |
 
@@ -69,7 +70,7 @@ cargo build --release
 
 二进制产物放入 `com.gdwhisper.tikclock.sdPlugin/bin/`（Windows 下 `./build.ps1` 一步完成）。开发时可将 `.sdPlugin` 文件夹符号链接到插件目录。
 
-支持的构建目标：`x86_64-pc-windows-msvc`、`x86_64-unknown-linux-gnu`。
+支持的构建目标：`x86_64-pc-windows-msvc`、`x86_64-apple-darwin`、`aarch64-apple-darwin`、`x86_64-unknown-linux-gnu`、`aarch64-unknown-linux-gnu`。
 
 ## 许可证
 

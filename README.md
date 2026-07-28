@@ -18,7 +18,7 @@ Split the current time (HH:MM:SS) into individual digits and lay them out howeve
 - **Blinking colon** — optional, synced to seconds
 - **12 / 24 hour clock** — 12h mode drops the leading zero naturally
 - **Custom colors** — text and background color per key
-- **Run command on press** — every digit doubles as a launcher (`cmd /C` on Windows, `sh -c` on Linux); leave empty for no action
+- **Run command on press** — every digit doubles as a launcher (`cmd /C` on Windows, `sh -c` on macOS/Linux); leave empty for no action
 - **Localized settings UI** — English and 简体中文, following the host language
 - **Lightweight & defensive** — single ~1.4 MB native binary; differential rendering sends only changed frames (~3 messages/s for a full 8-key clock), with staggered forced refresh, invalidation debounce and a per-tick send cap so it can never flood the host or device
 
@@ -44,6 +44,7 @@ Search for **TikClock** in the [OpenAction Marketplace](https://marketplace.rivu
 | Platform | Path |
 |---|---|
 | Windows | `%appdata%\opendeck\plugins\` |
+| macOS | `~/Library/Application Support/opendeck/plugins/` |
 | Linux | `~/.config/opendeck/plugins/` |
 | Flatpak | `~/.var/app/me.amankhanna.opendeck/config/opendeck/plugins/` |
 
@@ -69,7 +70,7 @@ cargo build --release
 
 The binary goes into `com.gdwhisper.tikclock.sdPlugin/bin/` (on Windows, `./build.ps1` does both steps). Symlink the `.sdPlugin` folder into your plugins directory for development.
 
-Supported targets: `x86_64-pc-windows-msvc`, `x86_64-unknown-linux-gnu`.
+Supported targets: `x86_64-pc-windows-msvc`, `x86_64-apple-darwin`, `aarch64-apple-darwin`, `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`.
 
 ## License
 
