@@ -34,7 +34,7 @@ Split the current time (HH:MM:SS) into individual digits and lay them out howeve
 
 ### From the OpenAction Marketplace
 
-Search for **TikClock** in the [OpenAction Marketplace](https://marketplace.rivul.us/) (once listed).
+Search for **TikClock** in the [OpenAction Marketplace](https://marketplace.rivul.us/).
 
 ### Manual
 

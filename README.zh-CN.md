@@ -34,7 +34,7 @@
 
 ### 从 OpenAction 插件市场
 
-在 [OpenAction Marketplace](https://marketplace.rivul.us/) 搜索 **TikClock**（上架后可用）。
+在 [OpenAction Marketplace](https://marketplace.rivul.us/) 搜索 **TikClock**。
 
 ### 手动安装
 

@@ -73,7 +73,7 @@ CI pitfalls already learned (do not regress):
 
 ## Ecosystem / distribution
 
-Listed in the OpenDeck plugin store via [`OpenActionAPI/plugins`](https://github.com/OpenActionAPI/plugins) `catalogue.json` (entry submitted in [PR #33](https://github.com/OpenActionAPI/plugins/pull/33)). The store resolves the latest GitHub Release from the `repository` field at runtime, therefore:
+Listed in the OpenDeck plugin store via [`OpenActionAPI/plugins`](https://github.com/OpenActionAPI/plugins) `catalogue.json` (entry merged via [PR #33](https://github.com/OpenActionAPI/plugins/pull/33) on 2026-07-28). The store resolves the latest GitHub Release from the `repository` field at runtime, therefore:
 
 - **Normal version updates need no catalogue PR** — just publish a new Release here.
 - A catalogue PR **is** required if any of these change: plugin `Name`, `Author`, repo URL, or the icon. Catalogue rules: entry in the *Native OpenAction plugins* section, sorted alphabetically by repository URL, `name`/`author` exactly matching `manifest.json`, description matching the GitHub repo sidebar, tab-indented JSON, icon `icons/com.gdwhisper.tikclock.png` (high-res; maintainers format it themselves).
