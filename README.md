@@ -15,6 +15,7 @@ Split the current time (HH:MM:SS) into individual digits and lay them out howeve
 
 - **One digit per key** — assign any position of HH:MM:SS to any key
 - **Two digits per key** — compact mode showing full hours/minutes/seconds in a single key
+- **Two display styles** — plain text, or a seven-segment digit face drawn as vector shapes (no font dependency, identical on every platform), with optional unlit "ghost" segments and calculator-style slant
 - **Blinking colon** — optional, synced to seconds
 - **12 / 24 hour clock** — 12h mode drops the leading zero naturally
 - **Custom colors** — text and background color per key
@@ -57,6 +58,9 @@ Add the **Clock Digit** action to a key, then configure it in the property inspe
 | Setting | Description |
 |---|---|
 | Position | Which part of HH:MM:SS this key shows (single digit, colon, or two-digit pair) |
+| Style | `Text`, or `Seven-segment` — digits drawn as vector segments, so no font has to be installed |
+| Show unlit segments | Faint "ghost" segments behind the lit ones, like a real display (seven-segment only) |
+| Slanted digits | Calculator-style italic lean (seven-segment only) |
 | 24-hour clock | Toggle between 24h and 12h display |
 | Blinking colon | Colon keys blink once per second |
 | Text / Background color | Per-key colors |

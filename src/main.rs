@@ -2,13 +2,15 @@ use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use chrono::{Local, Timelike};
 use openaction::global_events::{
 	set_global_event_handler, DeviceDidConnectEvent, GlobalEventHandler, SystemDidWakeUpEvent,
 };
 use openaction::*;
 use serde::{Deserialize, Serialize};
+
+mod style;
+use style::DigitStyle;
 
 /// 时钟位：该按键实例显示 HH:MM:SS 中的哪一位（Pair 为两位同格显示）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -31,6 +33,12 @@ enum Position {
 #[serde(default)]
 struct DigitSettings {
 	position: Position,
+	/// 按键外观样式（文字 / 七段数码管）
+	style: DigitStyle,
+	/// 七段样式下是否隐约显示未点亮的段
+	ghost_segments: bool,
+	/// 七段样式下是否倾斜（计算器字形）
+	slant: bool,
 	twenty_four_hour: bool,
 	blink_colon: bool,
 	color: String,
@@ -43,6 +51,9 @@ impl Default for DigitSettings {
 	fn default() -> Self {
 		Self {
 			position: Position::default(),
+			style: DigitStyle::default(),
+			ghost_segments: true,
+			slant: true,
 			twenty_four_hour: true,
 			blink_colon: true,
 			color: "#ffffff".to_owned(),
@@ -101,7 +112,7 @@ fn text_for(settings: &DigitSettings, hour: u32, minute: u32, second: u32) -> St
 	}
 }
 
-/// 颜色值白名单校验，防止拼进 SVG 的内容破坏结构
+/// 颜色值白名单校验，防止拼进 SVG 的内容破坏结构（style 模块取色时同样走这里）
 fn safe_color<'a>(value: &'a str, fallback: &'a str) -> &'a str {
 	let valid = value.len() <= 9
 		&& value.starts_with('#')
@@ -113,37 +124,11 @@ fn safe_color<'a>(value: &'a str, fallback: &'a str) -> &'a str {
 	}
 }
 
-/// 把文本（1-2 个字符）渲染成 144x144 SVG data URI，字号随长度自适应
-fn render_svg(text: &str, settings: &DigitSettings) -> String {
-	let fg = safe_color(&settings.color, "#ffffff");
-	let bg = safe_color(&settings.background, "#000000");
-	// 单字符大字号；两字符缩小以完整容纳
-	let (font_size, baseline_y) = if text.trim().chars().count() > 1 {
-		(80, 101)
-	} else {
-		(112, 112)
-	};
-	let svg = format!(
-		concat!(
-			r#"<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144">"#,
-			r#"<rect width="144" height="144" fill="{bg}"/>"#,
-			r#"<text x="72" y="{y}" font-family="sans-serif" font-size="{size}" font-weight="bold" fill="{fg}" text-anchor="middle">{text}</text>"#,
-			"</svg>"
-		),
-		bg = bg,
-		fg = fg,
-		y = baseline_y,
-		size = font_size,
-		text = text,
-	);
-	format!("data:image/svg+xml;base64,{}", BASE64.encode(svg))
-}
-
 /// 立即为单个实例渲染一帧（无视缓存），用于 willAppear / 设置变更
 async fn redraw_instance(instance: &Instance, settings: &DigitSettings) -> OpenActionResult<()> {
 	let now = Local::now();
 	let text = text_for(settings, now.hour(), now.minute(), now.second());
-	let image = render_svg(&text, settings);
+	let image = style::render_svg(&text, settings);
 	LAST_TEXT
 		.lock()
 		.unwrap()
@@ -294,7 +279,7 @@ async fn tick_loop() {
 				if unchanged && !force {
 					None
 				} else {
-					let image = render_svg(&text, settings);
+					let image = style::render_svg(&text, settings);
 					Some((text, image))
 				}
 			};
@@ -410,6 +395,49 @@ mod tests {
 		assert_eq!(safe_color("#12abEF", "#000000"), "#12abEF");
 		assert_eq!(safe_color("red\"/><script>", "#000000"), "#000000");
 		assert_eq!(safe_color("", "#ffffff"), "#ffffff");
+	}
+
+	/// 新增 style / ghost_segments / slant 后，改动前存的 profile 必须照旧渲染成文字样式
+	#[test]
+	fn legacy_settings_without_style_stay_text() {
+		let legacy = r##"{
+			"position": "minute_ones",
+			"twenty_four_hour": false,
+			"blink_colon": false,
+			"color": "#0f0",
+			"background": "#000",
+			"command": "notepad"
+		}"##;
+		let parsed: DigitSettings = serde_json::from_str(legacy).unwrap();
+		assert_eq!(parsed.style, DigitStyle::Text);
+		assert_eq!(parsed.position, Position::MinuteOnes);
+		assert!(!parsed.twenty_four_hour);
+		assert_eq!(parsed.command, "notepad");
+		// 首次拖入按键时宿主可能给空对象
+		let empty: DigitSettings = serde_json::from_str("{}").unwrap();
+		assert_eq!(empty.style, DigitStyle::Text);
+	}
+
+	/// 面板 setSettings 实际发出的 payload（无头 Chrome 实测抓取），必须能落进 DigitSettings
+	#[test]
+	fn inspector_payload_matches_settings_contract() {
+		let from_inspector = r##"{
+			"position": "hour_tens",
+			"style": "seven_segment",
+			"ghost_segments": false,
+			"slant": false,
+			"twenty_four_hour": true,
+			"blink_colon": true,
+			"color": "#ff0000",
+			"background": "#000000",
+			"command": ""
+		}"##;
+		let parsed: DigitSettings = serde_json::from_str(from_inspector).unwrap();
+		assert_eq!(parsed.style, DigitStyle::SevenSegment);
+		assert!(!parsed.ghost_segments);
+		assert!(!parsed.slant);
+		assert_eq!(parsed.position, Position::HourTens);
+		assert_eq!(parsed.color, "#ff0000");
 	}
 
 	#[test]

@@ -630,13 +630,14 @@ dependencies = [
 
 [[package]]
 name = "tikclock"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "base64",
  "chrono",
  "log",
  "openaction",
  "serde",
+ "serde_json",
  "simplelog",
  "tokio",
 ]

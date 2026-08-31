@@ -14,7 +14,8 @@ Orientation for any LLM/agent taking over this repository.
 ## Repository layout
 
 ```
-src/main.rs                          # Entire plugin logic (single file, ~430 lines, unit tests at bottom)
+src/main.rs                          # Plugin logic: settings, tick loop, global events (unit tests at bottom)
+src/style.rs                         # All appearance code: DigitStyle enum, shared SVG shell, per-style body generators, seven-segment geometry
 com.gdwhisper.tikclock.sdPlugin/     # The distributable plugin bundle
   manifest.json                      # OpenAction manifest (Name/Author/Version/Actions)
   icons/icon.svg                     # Plugin icon: 2×2 key grid digital clock (NOT an analog clock — see conventions)
@@ -28,15 +29,20 @@ plugin-development-guide.md          # General OpenDeck plugin development notes
 target/                              # gitignored; also used as scratch space (e.g. plugins-fork clone)
 ```
 
-## Architecture (src/main.rs)
+## Architecture (`src/main.rs` + `src/style.rs`)
 
-Data flow per second: `tick_loop()` → `text_for(settings, h, m, s)` → `render_svg()` (144×144 SVG data URI) → `instance.set_image()`.
+Data flow per second: `tick_loop()` → `text_for(settings, h, m, s)` → `style::render_svg(text, settings)` (144×144 SVG data URI) → `instance.set_image()`.
+
+**The one boundary that matters: content vs appearance.** `text_for()` decides *which characters* a key shows this second and knows nothing about looks. Everything about looks lives in `src/style.rs`, which owns a shared SVG shell (`<svg>` header + background rect + base64) and dispatches on `settings.style` to one body generator per style. Adding a style = add a `DigitStyle` variant + a `body_xxx()` function; the shell and the tick loop never change.
+
+`DigitStyle::SevenSegment` draws digits as **vector polygons, deliberately not a font**: the host rasterizes the SVG data URI, so a bundled seven-segment font would work on some machines and not others across the 5 targets. Self-drawn segments are byte-identical everywhere and never interpolate user text into the SVG.
 
 Key mechanisms — **do not remove these when refactoring**, each guards against a real failure mode:
 
 | Mechanism | Where | Why |
 |---|---|---|
 | Differential rendering | `LAST_TEXT` cache | Only re-send an image when the displayed text changed; avoids flooding the device 1×/sec per key |
+| Image depends only on `(text, settings)` | invariant across `text_for` + `style::render_svg` | `LAST_TEXT` caches *text*, not pixels — safe only while this holds. Settings changes always force a send via `did_receive_settings` → `redraw_instance` |
 | Aligned tick | top of `tick_loop` | Sleeps to the next wall-clock second boundary so all keys flip together |
 | Forced refresh with phase stagger | `FORCE_REFRESH_PERIOD`, `instance_phase()` | Devices silently drop images (reset/reconnect); each instance re-sends every 15 s, hashed to different ticks |
 | Per-tick circuit breaker | `MAX_IMAGES_PER_TICK` | Caps burst image sends; over-budget instances get their cache evicted and retry next tick |
@@ -49,7 +55,7 @@ Other behaviors: `key_down` optionally runs a user-configured shell command sile
 ## Conventions
 
 - **Indentation: tabs** — in Rust source, `manifest.json`, and the upstream catalogue.
-- **Code comments are in Simplified Chinese**; keep that style when editing `src/main.rs`.
+- **Code comments are in Simplified Chinese**; keep that style when editing `src/main.rs` or `src/style.rs`.
 - **Bilingual README**: `README.md` (English) and `README.zh-CN.md` (中文) mirror each other section-for-section with language-switch links at the top. Any doc change must be applied to both.
 - **Product identity**: the icon and all imagery must depict a *digital clock split across key tiles* — never an analog clock with hands.
 - **Property inspector i18n**: `inspector.html` contains a zh/en string table keyed by `data-i18n` attributes, selecting language from the host's `application.language`. New UI strings need both translations.
@@ -58,7 +64,9 @@ Other behaviors: `key_down` optionally runs a user-configured shell command sile
 ## Build, test, release
 
 ```powershell
-cargo test          # unit tests (pure functions: text_for, safe_color, instance_phase)
+cargo test          # pure-function tests: text_for, safe_color, instance_phase,
+                    # style (segment table, glyph/ghost/slant output, layout invariants),
+                    # plus settings JSON compat checks (needs serde_json dev-dep)
 ./build.ps1         # local Windows build; copies exe into the .sdPlugin bundle
 ```
 
@@ -81,7 +89,10 @@ Listed in the OpenDeck plugin store via [`OpenActionAPI/plugins`](https://github
 
 ## Known landmines
 
+- **Do not run `cargo fmt`.** There is no `rustfmt.toml` and the repo is hand-formatted with tabs; rustfmt defaults to 4 spaces and would rewrite every line, burying the real diff. Match the existing tab indentation manually. CI runs no fmt step.
+- Property inspector sends settings as `payload: settings` (flat), while the host pushes them back as `payload.settings` — the two directions differ. When adding a setting, update the PI's `settings` default, `fields`, `applyToForm()`, `readFromForm()` and the Rust `DigitSettings` (which has `#[serde(default)]`, so old profiles keep working).
 - `openaction` crate: `visible_instances()` takes `&str` (use `DigitAction::UUID`), not a typed ActionUuid.
 - Linux/macOS binaries in the bundle must be executable (`chmod +x` happens in CI packaging; remember it if packaging manually).
 - OpenDeck plugin install paths differ per platform (Windows `%APPDATA%`, macOS `~/Library/Application Support`, Linux `~/.local/share`, Flatpak variant) — documented in the READMEs; keep those paths accurate.
+- `./build.ps1` compiles fine but its `Copy-Item` step fails with a Windows "file in use" IOException when OpenDeck is running — the old exe in `bin/` is loaded and locked. Quit OpenDeck first (or read the freshly built `target/release/tikclock.exe` to confirm the build itself succeeded).
 - `target/` is gitignored and doubles as scratch space for tooling (e.g., a clone of the catalogue fork lives at `target/plugins-fork` during submission work); never commit anything under it.

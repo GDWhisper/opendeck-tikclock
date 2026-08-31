@@ -1,6 +1,6 @@
 [package]
 name = "tikclock"
-version = "1.0.1"
+version = "1.1.0"
 edition = "2021"
 authors = ["GDWhisper"]
 repository = "https://github.com/GDWhisper/opendeck-tikclock"
@@ -13,6 +13,9 @@ chrono = "0.4"
 base64 = "0.22"
 log = "0.4"
 simplelog = "0.12"
+
+[dev-dependencies]
+serde_json = "1"
 
 [profile.release]
 strip = true

@@ -19,6 +19,10 @@
 		margin-bottom: 10px;
 		gap: 8px;
 	}
+	/* .row 有显式 display，仅靠 hidden 属性藏不住 */
+	.row[hidden] {
+		display: none;
+	}
 	.row > label:first-child {
 		flex: 0 0 90px;
 		text-align: right;
@@ -71,6 +75,23 @@
 		</select>
 	</div>
 	<div class="row">
+		<label for="style" data-i18n="style">Style</label>
+		<select id="style">
+			<option value="text" data-i18n="style_text">Text</option>
+			<option value="seven_segment" data-i18n="style_seven_segment">Seven-segment</option>
+		</select>
+	</div>
+	<div class="row seg-only" hidden>
+		<label></label>
+		<input type="checkbox" id="ghost_segments">
+		<label class="check-label" for="ghost_segments" data-i18n="ghost_segments">Show unlit segments</label>
+	</div>
+	<div class="row seg-only" hidden>
+		<label></label>
+		<input type="checkbox" id="slant">
+		<label class="check-label" for="slant" data-i18n="slant">Slanted digits</label>
+	</div>
+	<div class="row">
 		<label></label>
 		<input type="checkbox" id="twenty_four_hour">
 		<label class="check-label" for="twenty_four_hour" data-i18n="twenty_four_hour">24-hour clock</label>
@@ -98,6 +119,9 @@
 	let context = null;
 	let settings = {
 		position: "hour_tens",
+		style: "text",
+		ghost_segments: true,
+		slant: true,
 		twenty_four_hour: true,
 		blink_colon: true,
 		color: "#ffffff",
@@ -105,7 +129,7 @@
 		command: ""
 	};
 
-	const fields = ["position", "twenty_four_hour", "blink_colon", "color", "background", "command"];
+	const fields = ["position", "style", "ghost_segments", "slant", "twenty_four_hour", "blink_colon", "color", "background", "command"];
 
 	// i18n：默认英文，宿主语言为 zh* 时切中文
 	const I18N = {
@@ -121,6 +145,11 @@
 			second_pair: "秒 — 两位同格",
 			second_tens: "秒 — 十位",
 			second_ones: "秒 — 个位",
+			style: "显示样式",
+			style_text: "文字",
+			style_seven_segment: "七段数码管",
+			ghost_segments: "显示暗段",
+			slant: "数字倾斜",
 			twenty_four_hour: "24 小时制",
 			blink_colon: "冒号闪烁",
 			color: "文字颜色",
@@ -145,15 +174,28 @@
 
 	function applyToForm() {
 		document.getElementById("position").value = settings.position;
+		document.getElementById("style").value = settings.style;
+		document.getElementById("ghost_segments").checked = settings.ghost_segments;
+		document.getElementById("slant").checked = settings.slant;
 		document.getElementById("twenty_four_hour").checked = settings.twenty_four_hour;
 		document.getElementById("blink_colon").checked = settings.blink_colon;
 		document.getElementById("color").value = settings.color;
 		document.getElementById("background").value = settings.background;
 		document.getElementById("command").value = settings.command;
+		updateVisibility();
+	}
+
+	// 暗段与倾斜只对七段样式有意义
+	function updateVisibility() {
+		const seven = document.getElementById("style").value === "seven_segment";
+		document.querySelectorAll(".seg-only").forEach(el => { el.hidden = !seven; });
 	}
 
 	function readFromForm() {
 		settings.position = document.getElementById("position").value;
+		settings.style = document.getElementById("style").value;
+		settings.ghost_segments = document.getElementById("ghost_segments").checked;
+		settings.slant = document.getElementById("slant").checked;
 		settings.twenty_four_hour = document.getElementById("twenty_four_hour").checked;
 		settings.blink_colon = document.getElementById("blink_colon").checked;
 		settings.color = document.getElementById("color").value;
@@ -175,6 +217,7 @@
 	fields.forEach(id => {
 		document.getElementById(id).addEventListener("change", saveSettings);
 	});
+	document.getElementById("style").addEventListener("change", updateVisibility);
 
 	// 宿主注入调用的入口
 	function connectElgatoStreamDeckSocket(port, uuid, registerEvent, info, actionInfo) {
