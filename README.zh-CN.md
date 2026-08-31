@@ -51,6 +51,14 @@
 
 3. 重启 OpenDeck
 
+> **仅 macOS**：二进制未签名、未公证。用浏览器下载的 zip 会带上隔离属性，可能导致插件加载失败。复制完成后清除它：
+>
+> ```sh
+> xattr -dr com.apple.quarantine ~/Library/Application\ Support/opendeck/plugins/com.gdwhisper.tikclock.sdPlugin
+> ```
+>
+> 从插件市场安装不会带上这个属性。
+
 ## 配置
 
 把 **Clock Digit** 动作拖到按键上，然后在属性检查器中配置：
