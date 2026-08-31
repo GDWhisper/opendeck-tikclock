@@ -51,7 +51,7 @@ Search for **TikClock** in the [OpenAction Marketplace](https://marketplace.rivu
 
 3. Restart OpenDeck
 
-> **macOS only**: the binaries are unsigned and not notarized. A zip downloaded through a browser carries the quarantine flag, which can stop the plugin from loading. Clear it after copying:
+> **Note for macOS**: the binaries are unsigned and not notarized. A zip downloaded through a browser carries the quarantine flag, which can stop the plugin from loading. Clear it after copying:
 >
 > ```sh
 > xattr -dr com.apple.quarantine ~/Library/Application\ Support/opendeck/plugins/com.gdwhisper.tikclock.sdPlugin

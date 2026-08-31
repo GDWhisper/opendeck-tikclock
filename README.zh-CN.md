@@ -51,7 +51,7 @@
 
 3. 重启 OpenDeck
 
-> **仅 macOS**：二进制未签名、未公证。用浏览器下载的 zip 会带上隔离属性，可能导致插件加载失败。复制完成后清除它：
+> **仅 macOS 需注意**：二进制未签名、未公证。用浏览器下载的 zip 会带上隔离属性，可能导致插件加载失败。复制完成后清除它：
 >
 > ```sh
 > xattr -dr com.apple.quarantine ~/Library/Application\ Support/opendeck/plugins/com.gdwhisper.tikclock.sdPlugin
