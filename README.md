@@ -15,8 +15,9 @@ Split the current time (HH:MM:SS) into individual digits and lay them out howeve
 
 - **One digit per key** — assign any position of HH:MM:SS to any key
 - **Two digits per key** — compact mode showing full hours/minutes/seconds in a single key
+- **Local date**. Put the full year, two-digit month, and two-digit day on three keys, or give each digit its own key.
 - **Two display styles** — plain text, or a seven-segment digit face drawn as vector shapes (no font dependency, identical on every platform), with optional unlit "ghost" segments and calculator-style slant
-- **Blinking colon** — optional, synced to seconds
+- **Blinking separators**. Colons and dashes can blink in sync with the seconds.
 - **12 / 24 hour clock** — 12h mode drops the leading zero naturally
 - **Custom colors** — text and background color per key
 - **Run command on press** — every digit doubles as a launcher (`cmd /C` on Windows, `sh -c` on macOS/Linux); leave empty for no action
@@ -30,6 +31,8 @@ Split the current time (HH:MM:SS) into individual digits and lay them out howeve
 | Full clock | 8 | `H` `H` `:` `M` `M` `:` `S` `S` |
 | Compact | 3 | `HH` `MM` `SS` (two digits per key) |
 | Minimal | 2 | `HH` `MM` |
+| Date | 3 | `YYYY` or `YY`, then `MM` and `DD` (year, month, day) |
+| Date with dashes | 5 | `YY` `-` `MM` `-` `DD` |
 
 ## Installation
 
@@ -65,12 +68,12 @@ Add the **Clock Digit** action to a key, then configure it in the property inspe
 
 | Setting | Description |
 |---|---|
-| Position | Which part of HH:MM:SS this key shows (single digit, colon, or two-digit pair) |
+| Position | The time or date part to show on this key. Date positions use the computer's local date. |
 | Style | `Text`, or `Seven-segment` — digits drawn as vector segments, so no font has to be installed |
-| Show unlit segments | Faint "ghost" segments behind the lit ones, like a real display (seven-segment only) |
-| Slanted digits | Calculator-style italic lean (seven-segment only) |
+| Show unlit segments | Show faint unlit segments in seven-segment style. Blinking separators stay faintly visible between flashes. |
+| Slanted digits | Tilt digits, colons, and dashes in seven-segment style |
 | 24-hour clock | Toggle between 24h and 12h display |
-| Blinking colon | Colon keys blink once per second |
+| Blink | Alternate a colon or dash between lit and unlit each second |
 | Text / Background color | Per-key colors |
 | On-press command | Shell command executed when the key is pressed (optional) |
 

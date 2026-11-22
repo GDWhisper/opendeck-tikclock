@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
-use chrono::{Local, Timelike};
+use chrono::{Datelike, Local, NaiveDateTime, Timelike};
 use openaction::global_events::{
 	set_global_event_handler, DeviceDidConnectEvent, GlobalEventHandler, SystemDidWakeUpEvent,
 };
@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 mod style;
 use style::DigitStyle;
 
-/// 时钟位：该按键实例显示 HH:MM:SS 中的哪一位（Pair 为两位同格显示）
+/// 显示位置：该按键显示时间或日期的哪一部分（Pair 为两位同格显示）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum Position {
@@ -21,12 +21,25 @@ enum Position {
 	HourOnes,
 	HourPair,
 	Colon,
+	Dash,
 	MinuteTens,
 	MinuteOnes,
 	MinutePair,
 	SecondTens,
 	SecondOnes,
 	SecondPair,
+	YearFull,
+	YearPair,
+	YearThousands,
+	YearHundreds,
+	YearTens,
+	YearOnes,
+	MonthPair,
+	MonthTens,
+	MonthOnes,
+	DayPair,
+	DayTens,
+	DayOnes,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -79,12 +92,11 @@ static LAST_TEXT: LazyLock<Mutex<HashMap<InstanceId, String>>> =
 /// 上一次全量失效的时刻，用于防抖
 static LAST_INVALIDATE: LazyLock<Mutex<Option<Instant>>> = LazyLock::new(|| Mutex::new(None));
 
-/// 计算某实例当前应显示的文本（单位或两位）
-fn text_for(settings: &DigitSettings, hour: u32, minute: u32, second: u32) -> String {
-	let digit = |value: u32, tens: bool| -> String {
-		let d = if tens { value / 10 } else { value % 10 };
-		char::from_digit(d, 10).unwrap_or('0').to_string()
-	};
+/// 计算某实例当前应显示的时间或日期文本
+fn text_for(settings: &DigitSettings, now: NaiveDateTime) -> String {
+	let digit = |value: u32, place: u32| (value / place % 10).to_string();
+	let (hour, minute, second) = (now.hour(), now.minute(), now.second());
+	let year = now.year_ce().1;
 	let display_hour = if settings.twenty_four_hour {
 		hour
 	} else {
@@ -96,19 +108,32 @@ fn text_for(settings: &DigitSettings, hour: u32, minute: u32, second: u32) -> St
 	match settings.position {
 		// 12 小时制下时十位为 0 时留空更自然
 		Position::HourTens if !settings.twenty_four_hour && display_hour < 10 => " ".to_owned(),
-		Position::HourTens => digit(display_hour, true),
-		Position::HourOnes => digit(display_hour, false),
+		Position::HourTens => digit(display_hour, 10),
+		Position::HourOnes => digit(display_hour, 1),
 		// 两位同格：12 小时制不补前导零，居中更自然
 		Position::HourPair if !settings.twenty_four_hour => format!("{display_hour}"),
 		Position::HourPair => format!("{display_hour:02}"),
-		Position::Colon if settings.blink_colon && second % 2 == 1 => " ".to_owned(),
+		Position::Colon | Position::Dash if settings.blink_colon && second % 2 == 1 => " ".to_owned(),
 		Position::Colon => ":".to_owned(),
-		Position::MinuteTens => digit(minute, true),
-		Position::MinuteOnes => digit(minute, false),
+		Position::Dash => "-".to_owned(),
+		Position::MinuteTens => digit(minute, 10),
+		Position::MinuteOnes => digit(minute, 1),
 		Position::MinutePair => format!("{minute:02}"),
-		Position::SecondTens => digit(second, true),
-		Position::SecondOnes => digit(second, false),
+		Position::SecondTens => digit(second, 10),
+		Position::SecondOnes => digit(second, 1),
 		Position::SecondPair => format!("{second:02}"),
+		Position::YearFull => format!("{year:04}"),
+		Position::YearPair => format!("{:02}", year % 100),
+		Position::YearThousands => digit(year, 1000),
+		Position::YearHundreds => digit(year, 100),
+		Position::YearTens => digit(year, 10),
+		Position::YearOnes => digit(year, 1),
+		Position::MonthPair => format!("{:02}", now.month()),
+		Position::MonthTens => digit(now.month(), 10),
+		Position::MonthOnes => digit(now.month(), 1),
+		Position::DayPair => format!("{:02}", now.day()),
+		Position::DayTens => digit(now.day(), 10),
+		Position::DayOnes => digit(now.day(), 1),
 	}
 }
 
@@ -126,8 +151,7 @@ fn safe_color<'a>(value: &'a str, fallback: &'a str) -> &'a str {
 
 /// 立即为单个实例渲染一帧（无视缓存），用于 willAppear / 设置变更
 async fn redraw_instance(instance: &Instance, settings: &DigitSettings) -> OpenActionResult<()> {
-	let now = Local::now();
-	let text = text_for(settings, now.hour(), now.minute(), now.second());
+	let text = text_for(settings, Local::now().naive_local());
 	let image = style::render_svg(&text, settings);
 	LAST_TEXT
 		.lock()
@@ -260,8 +284,7 @@ async fn tick_loop() {
 		tokio::time::sleep(Duration::from_millis(1000u64.saturating_sub(ms).max(1) + 5)).await;
 
 		ticks = ticks.wrapping_add(1);
-		let now = Local::now();
-		let (hour, minute, second) = (now.hour(), now.minute(), now.second());
+		let now = Local::now().naive_local();
 		let mut sent: u32 = 0;
 
 		for instance in visible_instances(DigitAction::UUID).await {
@@ -271,7 +294,7 @@ async fn tick_loop() {
 				let Some(settings) = settings_map.get(&instance.instance_id) else {
 					continue;
 				};
-				let text = text_for(settings, hour, minute, second);
+				let text = text_for(settings, now);
 				// 周期性强制重绘对抗画面丢失，相位错峰后每 tick 最多多发少量几帧
 				let force = instance_phase(&instance.instance_id) == ticks % FORCE_REFRESH_PERIOD;
 				let unchanged =
@@ -327,6 +350,13 @@ mod tests {
 		}
 	}
 
+	fn time(hour: u32, minute: u32, second: u32) -> NaiveDateTime {
+		chrono::NaiveDate::from_ymd_opt(2026, 1, 1)
+			.unwrap()
+			.and_hms_opt(hour, minute, second)
+			.unwrap()
+	}
+
 	#[test]
 	fn splits_24h_time_into_digits() {
 		let cases = [
@@ -338,24 +368,55 @@ mod tests {
 			(Position::SecondOnes, "7"),
 		];
 		for (position, expected) in cases {
-			assert_eq!(text_for(&settings(position), 9, 35, 7), expected);
+			assert_eq!(text_for(&settings(position), time(9, 35, 7)), expected);
 		}
 	}
 
 	#[test]
 	fn pair_positions_show_two_digits() {
-		assert_eq!(text_for(&settings(Position::HourPair), 9, 35, 7), "09");
-		assert_eq!(text_for(&settings(Position::MinutePair), 9, 35, 7), "35");
-		assert_eq!(text_for(&settings(Position::SecondPair), 9, 35, 7), "07");
+		assert_eq!(text_for(&settings(Position::HourPair), time(9, 35, 7)), "09");
+		assert_eq!(text_for(&settings(Position::MinutePair), time(9, 35, 7)), "35");
+		assert_eq!(text_for(&settings(Position::SecondPair), time(9, 35, 7)), "07");
+		let year = time(9, 35, 7).with_year(2007).unwrap();
+		assert_eq!(text_for(&settings(Position::YearPair), year), "07");
+	}
+
+	#[test]
+	fn date_positions_render_saved_settings_across_new_year() {
+		let after = time(0, 0, 0);
+		let before = after - chrono::TimeDelta::seconds(1);
+		let cases = [
+			("year_full", "2025", "2026"),
+			("year_pair", "25", "26"),
+			("year_thousands", "2", "2"),
+			("year_hundreds", "0", "0"),
+			("year_tens", "2", "2"),
+			("year_ones", "5", "6"),
+			("month_pair", "12", "01"),
+			("month_tens", "1", "0"),
+			("month_ones", "2", "1"),
+			("day_pair", "31", "01"),
+			("day_tens", "3", "0"),
+			("day_ones", "1", "1"),
+		];
+		for (position, old, new) in cases {
+			let s: DigitSettings = serde_json::from_value(serde_json::json!({
+				"position": position,
+				"twenty_four_hour": false
+			}))
+			.unwrap();
+			assert_eq!(text_for(&s, before), old, "{position}");
+			assert_eq!(text_for(&s, after), new, "{position}");
+		}
 	}
 
 	#[test]
 	fn hour_pair_in_12h_mode_drops_leading_zero() {
 		let mut s = settings(Position::HourPair);
 		s.twenty_four_hour = false;
-		assert_eq!(text_for(&s, 21, 0, 0), "9");
-		assert_eq!(text_for(&s, 0, 0, 0), "12");
-		assert_eq!(text_for(&s, 12, 0, 0), "12");
+		assert_eq!(text_for(&s, time(21, 0, 0)), "9");
+		assert_eq!(text_for(&s, time(0, 0, 0)), "12");
+		assert_eq!(text_for(&s, time(12, 0, 0)), "12");
 	}
 
 	#[test]
@@ -363,31 +424,33 @@ mod tests {
 		let mut s = settings(Position::HourTens);
 		s.twenty_four_hour = false;
 		// 21:00 -> 9 点，十位留空
-		assert_eq!(text_for(&s, 21, 0, 0), " ");
+		assert_eq!(text_for(&s, time(21, 0, 0)), " ");
 		s.position = Position::HourOnes;
-		assert_eq!(text_for(&s, 21, 0, 0), "9");
+		assert_eq!(text_for(&s, time(21, 0, 0)), "9");
 		// 午夜 0 点 -> 12
 		s.position = Position::HourTens;
-		assert_eq!(text_for(&s, 0, 0, 0), "1");
+		assert_eq!(text_for(&s, time(0, 0, 0)), "1");
 		s.position = Position::HourOnes;
-		assert_eq!(text_for(&s, 0, 0, 0), "2");
+		assert_eq!(text_for(&s, time(0, 0, 0)), "2");
 		// 中午 12 点保持 12
-		assert_eq!(text_for(&s, 12, 0, 0), "2");
+		assert_eq!(text_for(&s, time(12, 0, 0)), "2");
 	}
 
 	#[test]
 	fn twenty_four_hour_mode_keeps_leading_zero() {
-		assert_eq!(text_for(&settings(Position::HourTens), 9, 0, 0), "0");
-		assert_eq!(text_for(&settings(Position::HourTens), 23, 0, 0), "2");
+		assert_eq!(text_for(&settings(Position::HourTens), time(9, 0, 0)), "0");
+		assert_eq!(text_for(&settings(Position::HourTens), time(23, 0, 0)), "2");
 	}
 
 	#[test]
-	fn colon_blinks_on_odd_seconds() {
-		let mut s = settings(Position::Colon);
-		assert_eq!(text_for(&s, 0, 0, 0), ":");
-		assert_eq!(text_for(&s, 0, 0, 1), " ");
-		s.blink_colon = false;
-		assert_eq!(text_for(&s, 0, 0, 1), ":");
+	fn separators_blink_on_odd_seconds() {
+		for (position, separator) in [(Position::Colon, ":"), (Position::Dash, "-")] {
+			let mut s = settings(position);
+			assert_eq!(text_for(&s, time(0, 0, 0)), separator);
+			assert_eq!(text_for(&s, time(0, 0, 1)), " ");
+			s.blink_colon = false;
+			assert_eq!(text_for(&s, time(0, 0, 1)), separator);
+		}
 	}
 
 	#[test]
