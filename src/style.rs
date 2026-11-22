@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use serde::{Deserialize, Serialize};
 
-use crate::{safe_color, DigitSettings};
+use crate::{safe_color, DigitSettings, Position};
 
 /// 按键外观样式：显示什么字符由 main.rs 的 text_for 决定，本模块只负责画成长什么样。
 /// 新增样式 = 加一个变体 + 加一个 body_xxx 生成函数，外壳不用动。
@@ -29,6 +29,8 @@ const BOX_H: f64 = 1000.0;
 const SLANT_DEG: f64 = 8.0;
 /// 暗段（未点亮段）透明度
 const GHOST_OPACITY: f64 = 0.08;
+/// 短横线只点亮中段 g
+const DASH_SEGMENT: u8 = 1 << 6;
 
 /// 数字 → 点亮的段，bit0..bit6 依次为 a(顶) b(右上) c(右下) d(底) e(左下) f(左上) g(中)
 const SEGMENTS: [u8; 10] = [
@@ -53,17 +55,17 @@ const SEG_GAP: i32 = 32;
 /// 横向段：两端为 45° 尖角，参数是左右尖角顶点（同一 y，即段中线）
 fn hex_h(xa: i32, cy: i32, xb: i32) -> String {
 	let h = SEG_T / 2;
-	hex_points(&[(xa, cy), (xa + h, cy - h), (xb - h, cy - h), (xb, cy), (xb - h, cy + h), (xa + h, cy + h)])
+	polygon_points(&[(xa, cy), (xa + h, cy - h), (xb - h, cy - h), (xb, cy), (xb - h, cy + h), (xa + h, cy + h)])
 }
 
 /// 竖向段：两端为 45° 尖角，参数是上下尖角顶点（同一 x，即段中线）
 fn hex_v(cx: i32, ya: i32, yb: i32) -> String {
 	let h = SEG_T / 2;
-	hex_points(&[(cx, ya), (cx + h, ya + h), (cx + h, yb - h), (cx, yb), (cx - h, yb - h), (cx - h, ya + h)])
+	polygon_points(&[(cx, ya), (cx + h, ya + h), (cx + h, yb - h), (cx, yb), (cx - h, yb - h), (cx - h, ya + h)])
 }
 
 /// 顶点列表 → SVG polygon 的 points 串
-fn hex_points(pts: &[(i32, i32)]) -> String {
+fn polygon_points(pts: &[(i32, i32)]) -> String {
 	pts.iter().map(|(x, y)| format!("{x},{y}")).collect::<Vec<_>>().join(" ")
 }
 
@@ -95,11 +97,25 @@ fn num(v: f64) -> String {
 	s.trim_end_matches('0').trim_end_matches('.').to_owned()
 }
 
-/// 把文本（1-2 个字符）渲染成 144x144 SVG data URI
+/// 把时间或日期文本渲染成 144x144 SVG data URI
 pub(crate) fn render_svg(text: &str, settings: &DigitSettings) -> String {
 	let bg = safe_color(&settings.background, "#000000");
 	let body = match settings.style {
 		DigitStyle::Text => body_text(text, settings),
+		DigitStyle::SevenSegment if text == " " && settings.ghost_segments => {
+			// 闪烁熄灭时，按位置画出暗淡的分隔符。
+			let separator = match settings.position {
+				Position::Colon => ":",
+				Position::Dash => "-",
+				_ => "",
+			};
+			if separator.is_empty() {
+				String::new()
+			} else {
+				let shapes = body_segments(separator, settings);
+				format!(r#"<g fill-opacity="{GHOST_OPACITY}">{shapes}</g>"#)
+			}
+		}
 		DigitStyle::SevenSegment => body_segments(text, settings),
 	};
 	let svg = format!(
@@ -117,11 +133,13 @@ pub(crate) fn render_svg(text: &str, settings: &DigitSettings) -> String {
 /// 文字样式：用宿主字体渲染，字号随字符数自适应
 fn body_text(text: &str, settings: &DigitSettings) -> String {
 	let fg = safe_color(&settings.color, "#ffffff");
-	// 单字符大字号；两字符缩小以完整容纳
-	let (font_size, baseline_y) = if text.trim().chars().count() > 1 {
-		(80, 101)
-	} else {
-		(112, 112)
+	let (font_size, baseline_y) = match text.trim().chars().count() {
+		0 | 1 => (112, 112),
+		2 => (80, 101),
+		count => {
+			let size = 168 / count;
+			(size, 72 + size * 3 / 8)
+		}
 	};
 	format!(
 		r#"<text x="72" y="{y}" font-family="sans-serif" font-size="{size}" font-weight="bold" fill="{fg}" text-anchor="middle">{text}</text>"#,
@@ -142,15 +160,19 @@ fn body_segments(text: &str, settings: &DigitSettings) -> String {
 
 	let mut out = String::new();
 	for (i, c) in chars.iter().copied().enumerate() {
-		let x = l.left + l.advance * i as f64;
-		match c {
+		let shapes = match c {
+			':' => colon_dots(),
+			'-' | '0'..='9' => glyph_shapes(c, settings),
 			// 空白位（12 小时制的空时十位、熄灭的冒号）只留背景
-			' ' => {}
-			// 数码管的冒号是两颗点，不随倾斜变形，故要退回未补偿时的字身中心
-			':' => out.push_str(&colon_dots(x + BOX_W * l.scale / 2.0 - l.skew / 2.0)),
-			'0'..='9' => out.push_str(&glyph_shapes(c, x, l.top, l.scale, settings)),
-			_ => {}
-		}
+			_ => continue,
+		};
+		let x = l.left + l.advance * i as f64;
+		let transform = if settings.slant {
+			format!("translate({},{}) skewX({}) scale({})", num(x), num(l.top), num(-SLANT_DEG), num(l.scale))
+		} else {
+			format!("translate({},{}) scale({})", num(x), num(l.top), num(l.scale))
+		};
+		out.push_str(&format!(r#"<g transform="{transform}">{shapes}</g>"#));
 	}
 	if out.is_empty() {
 		return String::new();
@@ -164,7 +186,9 @@ fn body_segments(text: &str, settings: &DigitSettings) -> String {
 struct Layout {
 	scale: f64,
 	advance: f64,
+	#[cfg(test)]
 	row_w: f64,
+	#[cfg(test)]
 	skew: f64,
 	left: f64,
 	top: f64,
@@ -173,14 +197,22 @@ struct Layout {
 fn layout(chars: usize, slant: bool) -> Layout {
 	let (height, spacing) =
 		if chars > 1 { (PAIR_HEIGHT, PAIR_SPACING) } else { (GLYPH_HEIGHT, 0.0) };
+	let skew_ratio = if slant { SLANT_DEG.to_radians().tan() } else { 0.0 };
+	let chars = chars as f64;
+	// 长数字串按比例缩小字身和字距，并为两侧各留 8 像素。
+	let width = BOX_W * height / BOX_H * chars + spacing * (chars - 1.0) + height * skew_ratio;
+	let fit = ((TILE - 16.0) / width).min(1.0);
+	let (height, spacing) = (height * fit, spacing * fit);
 	let scale = height / BOX_H;
 	let advance = BOX_W * scale + spacing;
-	let row_w = advance * chars as f64 - spacing;
-	let skew = if slant { SLANT_DEG.to_radians().tan() * height } else { 0.0 };
+	let row_w = advance * chars - spacing;
+	let skew = skew_ratio * height;
 	Layout {
 		scale,
 		advance,
+		#[cfg(test)]
 		row_w,
+		#[cfg(test)]
 		skew,
 		// 倾斜使字身下缘向左突出，整体右移半个突出量才能保持居中
 		left: (TILE - row_w + skew) / 2.0,
@@ -188,48 +220,53 @@ fn layout(chars: usize, slant: bool) -> Layout {
 	}
 }
 
-/// 单个数字的多边形（暗段=未点亮的段，画在点亮段之前垫底）
-fn glyph_shapes(digit: char, x: f64, y: f64, scale: f64, settings: &DigitSettings) -> String {
-	let lit = SEGMENTS[(digit as u8 - b'0') as usize];
+/// 单个数字或短横线的多边形（暗段画在点亮段之前）
+fn glyph_shapes(c: char, settings: &DigitSettings) -> String {
+	let lit = if c == '-' {
+		DASH_SEGMENT
+	} else {
+		SEGMENTS[(c as u8 - b'0') as usize]
+	};
+	let show_ghost = c != '-' && settings.ghost_segments;
 	let mut ghost = String::new();
 	let mut on = String::new();
 	for (i, pts) in SEG_POLYGONS.iter().enumerate() {
 		let shape = format!(r##"<polygon points="{pts}"/>"##);
 		if lit & (1 << i) != 0 {
 			on.push_str(&shape);
-		} else if settings.ghost_segments {
+		} else if show_ghost {
 			ghost.push_str(&shape);
 		}
 	}
-	let transform = if settings.slant {
-		format!("translate({},{}) skewX({}) scale({})", num(x), num(y), num(-SLANT_DEG), num(scale))
+	if ghost.is_empty() {
+		on
 	} else {
-		format!("translate({},{}) scale({})", num(x), num(y), num(scale))
-	};
-	let ghost_group = if ghost.is_empty() {
-		String::new()
-	} else {
-		format!(r#"<g fill-opacity="{}">{ghost}</g>"#, num(GHOST_OPACITY))
-	};
-	format!(r#"<g transform="{transform}">{ghost_group}{on}</g>"#)
+		format!(r#"<g fill-opacity="{}">{ghost}</g>{on}"#, num(GHOST_OPACITY))
+	}
 }
 
-/// 冒号：竖排两颗方点，水平居中于给定 x
-fn colon_dots(cx: f64) -> String {
-	const DOT: f64 = 14.0;
-	const RISE: f64 = 20.0;
-	let x = num(cx - DOT / 2.0);
-	let upper = num(TILE / 2.0 - RISE - DOT / 2.0);
-	let lower = num(TILE / 2.0 + RISE - DOT / 2.0);
-	format!(
-		r#"<rect x="{x}" y="{upper}" width="14" height="14"/><rect x="{x}" y="{lower}" width="14" height="14"/>"#
-	)
+/// 冒号：以归一化字身中心为基准，上下各画一颗切角方点
+fn colon_dots() -> String {
+	const HALF: i32 = 64;
+	const CORNER: i32 = 32;
+	const RISE: i32 = 180;
+	let cx = BOX_W as i32 / 2;
+	let cy = BOX_H as i32 / 2;
+	let dot = |y: i32| {
+		let points = polygon_points(&[
+			(cx - CORNER, y - HALF), (cx + CORNER, y - HALF),
+			(cx + HALF, y - CORNER), (cx + HALF, y + CORNER),
+			(cx + CORNER, y + HALF), (cx - CORNER, y + HALF),
+			(cx - HALF, y + CORNER), (cx - HALF, y - CORNER),
+		]);
+		format!(r#"<polygon points="{points}"/>"#)
+	};
+	format!("{}{}", dot(cy - RISE), dot(cy + RISE))
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::Position;
 
 	fn settings(style: DigitStyle) -> DigitSettings {
 		DigitSettings {
@@ -333,8 +370,18 @@ mod tests {
 	}
 
 	#[test]
+	fn full_year_renders_in_both_styles() {
+		let text = svg_of(&render_svg("2026", &settings(DigitStyle::Text)));
+		assert!(text.contains(r#"font-size="42""#));
+		assert!(text.contains(">2026</text>"));
+
+		let year = segments("2026", &settings(DigitStyle::SevenSegment));
+		assert_eq!(year.matches(r#"<g transform="translate"#).count(), 4);
+	}
+
+	#[test]
 	fn seven_segment_layout_stays_inside_the_tile() {
-		for chars in [1, 2] {
+		for chars in [1, 2, 4] {
 			for slant in [true, false] {
 				let l = layout(chars, slant);
 				let left_edge = l.left - l.skew;
@@ -350,16 +397,50 @@ mod tests {
 
 	#[test]
 	fn colon_is_two_dots_and_blank_is_empty() {
-		let s = settings(DigitStyle::SevenSegment);
-		let colon = segments(":", &s);
-		// 背景 rect 写作 <rect width= 不带 x，这里只数冒号的两颗点
-		assert_eq!(colon.matches(r#"<rect x="#).count(), 2);
-		// 点不做倾斜变形，倾斜开着也必须仍落在画布横向中心（72 - 14/2）
-		assert!(colon.contains(r##"<rect x="65""##), "{colon}");
-		assert!(!colon.contains("<polygon"));
+		let mut s = settings(DigitStyle::SevenSegment);
+		for slant in [true, false] {
+			s.slant = slant;
+			let colon = segments(":", &s);
+			let dash = segments("-", &s);
+			assert_eq!(colon.matches("<polygon").count(), 2);
+			assert_eq!(colon.contains("skewX(-8)"), slant);
+			assert_eq!(colon.split("<polygon").next(), dash.split("<polygon").next());
+			assert!(!colon.contains("fill-opacity"));
+		}
 		// 空格（熄灭冒号 / 12 小时制空时十位）只剩背景，什么都不画
 		assert!(!segments(" ", &s).contains("<g"));
 		assert!(!segments(" ", &s).contains("<polygon"));
+	}
+
+	#[test]
+	fn dash_renders_in_both_styles() {
+		let text = svg_of(&render_svg("-", &settings(DigitStyle::Text)));
+		assert!(text.contains(">-</text>"));
+
+		let mut s = settings(DigitStyle::SevenSegment);
+		for slant in [true, false] {
+			s.slant = slant;
+			let dash = segments("-", &s);
+			let middle = &SEG_POLYGONS[6];
+			assert!(dash.contains(&format!(r#"<polygon points="{middle}"/>"#)));
+			assert_eq!(dash.matches("<polygon").count(), 1);
+			assert_eq!(dash.contains("skewX(-8)"), slant);
+			assert!(!dash.contains("fill-opacity"));
+		}
+	}
+
+	#[test]
+	fn unlit_separators_keep_their_shape_when_ghost_segments_are_enabled() {
+		for (position, separator) in [(Position::Colon, ":"), (Position::Dash, "-")] {
+			let mut s = settings(DigitStyle::SevenSegment);
+			s.position = position;
+			let lit = body_segments(separator, &s);
+			let dim = segments(" ", &s);
+			assert!(dim.contains(&format!(r#"<g fill-opacity="0.08">{lit}</g>"#)));
+
+			s.ghost_segments = false;
+			assert!(!segments(" ", &s).contains("<polygon"));
+		}
 	}
 
 	#[test]
